@@ -119,70 +119,15 @@ app.get(
   }),
 );
 app.get('/api/analytics', w(async (req, res) => {
-  const [
-    total,
-    byEvent,
-    bySource,
-    byStatus
-  ] = await Promise.all([
-    R.countDocuments(),
-
-    R.aggregate([
-      {
-        $group: {
-          _id: '$eventType',
-          n: { $sum: 1 }
-        }
-      },
-      {
-        $sort: { n: -1 }
-      }
-    ]),
-
-    R.aggregate([
-      {
-        $group: {
-          _id: '$sourceType',
-          n: { $sum: 1 }
-        }
-      },
-      {
-        $sort: { n: -1 }
-      }
-    ]),
-
-    R.aggregate([
-      {
-        $group: {
-          _id: '$verificationStatus',
-          n: { $sum: 1 }
-        }
-      },
-      {
-        $sort: { n: -1 }
-      }
-    ])
+  const g = f => R.aggregate([{ $group: { _id: f, n: { $sum: 1 } } }, { $sort: { n: -1 } }]);
+  const [byState, byEvent, byStatus, bySource, total, sources] = await Promise.all([
+    g('$location.state'), g('$eventType'), g('$verificationStatus'), g('$sourceName'),
+    R.countDocuments(), M.Source.countDocuments()
   ]);
-
-  const statusCounts = Object.fromEntries(
-    byStatus.map((x) => [x._id, x.n])
-  );
-
+  const statusCounts = Object.fromEntries(byStatus.map(x => [x._id, x.n]));
   const verified = statusCounts.Verified || 0;
-
-  const verificationRate =
-    total === 0
-      ? 0
-      : Math.round((verified / total) * 100);
-
-  res.json({
-    total,
-    verified,
-    verificationRate,
-    byEvent,
-    bySource,
-    byStatus
-  });
+  const verificationRate = total === 0 ? 0 : Math.round((verified / total) * 100);
+  res.json({ total, sources, verified, verificationRate, byState, byEvent, byStatus, bySource });
 }));
 app.get(
   "/api/reports/location/:city",
